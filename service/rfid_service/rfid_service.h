@@ -2,12 +2,10 @@
 #define RFID_SERVICE_H
 #include <stdint.h>
 #include <stdbool.h>
-#define RFID_MAX_LENGTH  10
 
-typedef struct{
-    uint8_t uid[RFID_MAX_LENGTH];
-    uint8_t length;
-} RFID_UID_t;
+#include "rfid_struct.h"
+
+#define RFID_MAX_LENGTH  10
 
 void rfid_init(void);
 void rfid_process(void);
