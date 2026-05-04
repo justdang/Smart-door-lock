@@ -1,4 +1,6 @@
 // File: system_hardware.h
+#ifndef SYSTEM_HARDWARE_H
+#define SYSTEM_HARDWARE_H
 #include "servo_driver.h"
 #include "rtc_driver.h"
 #include "rfid_driver.h"
@@ -15,3 +17,4 @@ typedef struct {
 } System_Hardware_t;
 
 extern System_Hardware_t Hardware;
+#endif

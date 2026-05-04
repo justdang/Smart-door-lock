@@ -10,5 +10,4 @@ void keypad_resetBuffer(void); //xóa toàn bộ input
 bool keypad_addKey(void); //gom ký tự rời rạc thành chuỗi 
 bool keypad_bufferFull(void); //kiểm tra xem buffer đã đầy chưa
 char* keypad_getBuffer(void); //lấy dữ liệu buffer cho bên khác -> đổi mật khẩu, auth
-bool keypad_bufferReady(void); //đã đủ ký tự trong chuỗi chưa 
 #endif
