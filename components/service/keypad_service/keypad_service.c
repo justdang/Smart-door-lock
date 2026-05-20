@@ -2,9 +2,8 @@
 #include <stdbool.h>
 #include "keypad_service.h"
 #include "keypad_driver.h"
-#include "system_hardware.h"
+//#include "system_hardware.h"
 #include <string.h>
-#include "auth.h"
 
 #define KEYPAD_BUFFER_SIZE 6
 static char keypad_buffer[KEYPAD_BUFFER_SIZE];
@@ -16,10 +15,10 @@ void keypad_init(void){
 }
 
 char keypad_getPressedKey(void){
-    return (Hardware.Keypad->GetPressedKey());
+    return (Hardware.Keypad->Keypad_GetPressedKey_HW());
 }
 
-void keypad_process(void){}
+void keypad_process(void){} //de lam gi ?
 void keypad_resetBuffer(void){
     memset(keypad_buffer, 0, sizeof(keypad_buffer));
     buffer_count = 0;
