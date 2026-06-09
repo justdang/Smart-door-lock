@@ -1,18 +1,23 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
-#include <string.h>
 #include "esp_log.h" // có sẵn của espidf
 #include "rfid_struct.h"
 #include "storage.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h" // giai thich thu vien nay 
+
 #define MAX_PASSWORD_LENGTH 7 //6 ký tự và ký tự "\0"
 #define MAX_ADMIN_PASSWORD_LENGTH 7
 #define MAX_UIDS 10
+#define MAX_PASSWORD 5
 //ESP_LOGW: lệnh warning thông qua màn hình console sử dụng UART
 //password
-static char user_password[MAX_PASSWORD_LENGTH] = "123456"; //mật khẩu cho user (mặc định)
+typedef struct {
+    char    password[MAX_PASSWORD_LENGTH];
+    bool    is_used;
+} PasswordSlot;
+static PasswordSlot user_passwords[MAX_PASSWORD];
 static char admin_password[MAX_ADMIN_PASSWORD_LENGTH] = "111111"; //mật khẩu cho admin
 //UID
 static RFID_UID_t uid_storage[MAX_UIDS];
@@ -31,28 +36,70 @@ void storage_init(void){
     if (storage_mutex == NULL) {
         ESP_LOGE(TAG, "Failed to create storage mutex");
     }
+    memset(user_passwords, 0, sizeof(user_passwords));
+    strlcpy(user_passwords[0].password, "123456", MAX_PASSWORD_LENGTH); //mat khau mac dinh ban dau
+    user_passwords[0].is_used = true;
     ESP_LOGI(TAG, "Storage initialized (RAM only).");
 }
 //mã nguồn password
 //ok
 bool storage_savePassword(char* password) {
-  if (password == NULL) return false;
+  if (!_is_password_valid(password)) return false;
+if (xSemaphoreTake(storage_mutex, portMAX_DELAY) != pdTRUE) return false;
+for (uint8_t i = 0; i < MAX_PASSWORDS; i++){
+    if(!user_passwords[i].is_used){
+        strlcpy(user_password, password, MAX_PASSWORD_LENGTH);
+        user_passwords[i],is_used = true;
+        ESP_LOGI(TAG, "User password saved.");
+        xSemaphoreGive(storage_mutex);
+        return true;
+    }
+}
+}
+//get password
+//ok
+bool storage_getPassword(uint8_t index, char* out_password, size_t max_len) {
+    if (out_password == NULL || max_len == 0) return false;
+    if (index >= MAX_PASSWORDS) return false;
     if (xSemaphoreTake(storage_mutex, portMAX_DELAY) != pdTRUE) return false;
-    strlcpy(user_password, password, MAX_PASSWORD_LENGTH);
-    ESP_LOGI(TAG, "User password saved.");
- 
+    if (!user_passwords[index].is_used) {
+        // slot này trống, không có mật khẩu
+        ESP_LOGW(TAG, "Password slot %d is empty.", index);
+        xSemaphoreGive(storage_mutex);
+        return false;
+    }
+    strlcpy(out_password, user_passwords[index].password, max_len);
     xSemaphoreGive(storage_mutex);
     return true;
 }
 
-//get password
-//ok
-bool storage_getPassword(char* out_password, size_t max_len) {
-    if (out_password == NULL || max_len == 0) return false;
+bool storage_deletePassword(uint8_t index) {
+    if (index >= MAX_PASSWORDS) return false;
     if (xSemaphoreTake(storage_mutex, portMAX_DELAY) != pdTRUE) return false;
-    strlcpy(out_password, user_password, max_len);
+
+    if (!user_passwords[index].is_used) {
+        ESP_LOGW(TAG, "Password slot %d already empty.", index);
+        xSemaphoreGive(storage_mutex);
+        return false;
+    }
+
+    memset(user_passwords[index].password, 0, MAX_PASSWORD_LENGTH);
+    user_passwords[index].is_used = false;
+    ESP_LOGI(TAG, "Password slot %d deleted.", index);
+
     xSemaphoreGive(storage_mutex);
     return true;
+}
+uint8_t storage_getPasswordCount(void) {
+    if (xSemaphoreTake(storage_mutex, portMAX_DELAY) != pdTRUE) return 0;
+
+    uint8_t count = 0;
+    for (uint8_t i = 0; i < MAX_PASSWORDS; i++) {
+        if (user_passwords[i].is_used) count++;
+    }
+
+    xSemaphoreGive(storage_mutex);
+    return count;
 }
 
 //rfid 

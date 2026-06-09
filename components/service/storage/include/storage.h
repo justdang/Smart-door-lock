@@ -12,6 +12,8 @@ void storage_init(void);
 //password 
 bool storage_savePassword(char* password); // lấy pass mới và xóa pass cũ
 bool storage_getPassword(void);
+bool storage_deletePassword(uint8_t index);
+uint8_t storage_getPasswordCount(void)
 //rfid
 bool storage_addUID(RFID_UID_t* uid);
 bool storage_removeUID(RFID_UID_t* uid); // tìm và xóa UID

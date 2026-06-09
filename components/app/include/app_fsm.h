@@ -3,18 +3,32 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-//Dinh nghia state, fsm (fsm co the se duoc dua vao README neu can)
-typedef enum {
-    STATE_INIT = 0,
-    STATE_IDLE,
-    STATE_INPUT,
-    STATE_VERIFY,
-    STATE_UNLOCK,
-    STATE_WAIT_TO_LOCK,
-    STATE_LOCK,
-    STATE_ENROLL,
-    STATE_ERROR
-} appState;
+//FSM
+//system fsm
+
+
+//UI fsm
+typedef enum{
+    STATE_UI_INIT,
+    STATE_UI_IDLE,
+    STATE_UI_INPUT,
+    STATE_UI_VERIFY,
+    STATE_UI_DENY,
+    STATE_UI_UNLOCK,
+    STATE_UI_LOCK,
+    STATE_UI_ERROR,
+    STATE_UI_MENU,
+    STATE_UI_ENTER_NEW,
+    STATE_UI_CONFIRM_NEW,
+    STATE_UI_SAVE,
+    STATE_UI_WAIT_UID,
+    STATE_UI_VERIFY_UID,
+    STATE_UI_SAVE_UID,
+    STATE_UI_DUPLICATE,
+    STATE_UI_SUCCESS
+} uiState;
+
+
 
 //Dinh nghia event
 typedef enum{
