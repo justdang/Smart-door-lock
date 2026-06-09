@@ -1,65 +1,45 @@
 #include "rtc_driver.h"
-#include <time.h>
-#include <sys/time.h>
+#include "system_config.h"
+#include "driver/i2c.h"
+
+#define RTC_I2C_ADDR 0x68 // Địa chỉ mặc định của DS3231
 
 static void RTC_Init_HW(void) {
-    // Khởi tạo múi giờ (Ví dụ: Việt Nam GMT+7)
-    setenv("TZ", "CST-7", 1); 
-    tzset();
-    // (Việc kết nối SNTP qua Wifi sẽ do Wifi Driver thực hiện)
+    i2c_config_t conf = {
+        .mode = I2C_MODE_MASTER,
+        .sda_io_num = PIN_RTC_SDA,
+        .scl_io_num = PIN_RTC_SCL,
+        .sda_pullup_en = GPIO_PULLUP_ENABLE,
+        .scl_pullup_en = GPIO_PULLUP_ENABLE,
+        .master.clk_speed = 100000,
+    };
+    i2c_param_config(I2C_NUM_0, &conf);
+    i2c_driver_install(I2C_NUM_0, conf.mode, 0, 0, 0);
 }
 
+// Hàm đọc thời gian từ DS3231
 static bool RTC_GetTime_HW(DateTime_t *current_time) {
-    time_t now;
-    struct tm timeinfo;
-    time(&now);
-    localtime_r(&now, &timeinfo);
+    uint8_t reg = 0x00;
+    uint8_t buffer[7];
+    
+    // Gửi lệnh đọc thanh ghi từ 0x00
+    if (i2c_master_write_read_device(I2C_NUM_0, RTC_I2C_ADDR, &reg, 1, buffer, 7, 1000/portTICK_PERIOD_MS) != ESP_OK) {
+        return false;
+    }
 
-    if (timeinfo.tm_year < (2020 - 1900)) return false; // Chưa đồng bộ
+    // Convert BCD sang số thập phân
+    current_time->seconds = ((buffer[0] >> 4) * 10) + (buffer[0] & 0x0F);
+    current_time->minutes = ((buffer[1] >> 4) * 10) + (buffer[1] & 0x0F);
+    current_time->hours   = ((buffer[2] >> 4) * 10) + (buffer[2] & 0x0F);
+    current_time->date    = ((buffer[4] >> 4) * 10) + (buffer[4] & 0x0F);
+    current_time->month   = ((buffer[5] >> 4) * 10) + (buffer[5] & 0x0F);
+    current_time->year    = 2000 + ((buffer[6] >> 4) * 10) + (buffer[6] & 0x0F);
 
-    current_time->seconds = timeinfo.tm_sec;
-    current_time->minutes = timeinfo.tm_min;
-    current_time->hours   = timeinfo.tm_hour;
-    current_time->day     = timeinfo.tm_wday; // 0 = Sunday
-    current_time->date    = timeinfo.tm_mday;
-    current_time->month   = timeinfo.tm_mon + 1;
-    current_time->year    = timeinfo.tm_year + 1900;
     return true;
-}
-
-static bool RTC_SetTime_HW(const DateTime_t *new_time) {
-    struct tm timeinfo = {0};
-    timeinfo.tm_sec  = new_time->seconds;
-    timeinfo.tm_min  = new_time->minutes;
-    timeinfo.tm_hour = new_time->hours;
-    timeinfo.tm_mday = new_time->date;
-    timeinfo.tm_mon  = new_time->month - 1;
-    timeinfo.tm_year = new_time->year - 1900;
-
-    time_t t = mktime(&timeinfo);
-    struct timeval now = { .tv_sec = t, .tv_usec = 0 };
-    settimeofday(&now, NULL);
-    return true;
-}
-
-static uint32_t RTC_GetTimestamp_HW(void) {
-    time_t now;
-    time(&now);
-    return (uint32_t)now;
-}
-
-static bool RTC_IsSynced_HW(void) {
-    time_t now;
-    struct tm timeinfo;
-    time(&now);
-    localtime_r(&now, &timeinfo);
-    return (timeinfo.tm_year >= (2020 - 1900));
 }
 
 const RTC_Driver_t ESP32_RTC_Driver = {
-    .Init         = RTC_Init_HW,
-    .GetTime      = RTC_GetTime_HW,
-    .SetTime      = RTC_SetTime_HW,
-    .GetTimestamp = RTC_GetTimestamp_HW,
-    .IsSynced     = RTC_IsSynced_HW
+    .Init = RTC_Init_HW,
+    .GetTime = RTC_GetTime_HW
+    
 };
