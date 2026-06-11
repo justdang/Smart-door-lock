@@ -28,9 +28,15 @@ static char Keypad_GetPressedKey_HW(void) {
         gpio_set_level(ROW_PINS[r], 0); 
         for (int c = 0; c < 4; c++) {
             if (gpio_get_level(COL_PINS[c]) == 0) { 
-                vTaskDelay(pdMS_TO_TICKS(20)); // Debounce
+                vTaskDelay(pdMS_TO_TICKS(20)); // Chống rung phím (Debounce)
                 if (gpio_get_level(COL_PINS[c]) == 0) {
-                    while(gpio_get_level(COL_PINS[c]) == 0); // Đợi nhả phím
+                    
+                    // SỬA ĐỔI: Thêm vTaskDelay(1) vào vòng lặp chờ nhả phím 
+                    // để tránh gây lỗi đứng Task/kích hoạt Watchdog của ESP32 khi đè phím
+                    while(gpio_get_level(COL_PINS[c]) == 0) {
+                        vTaskDelay(pdMS_TO_TICKS(10)); 
+                    }
+                    
                     gpio_set_level(ROW_PINS[r], 1);
                     return KEY_MAP[r][c];
                 }
