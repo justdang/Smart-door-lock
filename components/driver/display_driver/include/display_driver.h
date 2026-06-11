@@ -1,16 +1,18 @@
-// File: display_driver.h
-// Driver cho màn hình
 #ifndef DISPLAY_DRIVER_H
 #define DISPLAY_DRIVER_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
-// Cấu trúc Driver trừu tượng cho Màn hình
+// Định nghĩa cấu trúc trỏ hàm (Interface) cho Display Driver
 typedef struct {
-    void (*Init)(void);                                   // Khởi tạo màn hình
-    void (*Clear)(void);                                  // Xóa toàn bộ màn hình
-    void (*PrintText)(uint8_t x, uint8_t y, char *text);  // In chuỗi tại tọa độ x, y
-    void (*ShowStatus)(char *status);                     // Hàm tiện ích: hiển thị dòng trạng thái lớn ở giữa
+    void (*Init)(void);
+    void (*Clear)(void);
+    void (*PrintText)(uint8_t x, uint8_t y, const char *text);
+    void (*ShowStatus)(const char *status);
 } Display_Driver_t;
+
+// Khai báo biến extern để các file khác (như main.c) có thể gọi driver này
+extern const Display_Driver_t ESP32_Display_Driver;
 
 #endif // DISPLAY_DRIVER_H

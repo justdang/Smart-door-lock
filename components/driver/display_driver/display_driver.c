@@ -1,206 +1,241 @@
 #include "display_driver.h"
 #include "system_config.h"
-#include "driver/spi_master.h"
+#include "driver/i2c.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#define TAG_DISP "DISPLAY_DRIVER"
+#define TAG_DISP "OLED_I2C_DRIVER"
 
-static spi_device_handle_t display_spi_handle;
+// Cấu hình các thông số I2C cho màn hình OLED
+#define I2C_MASTER_NUM              I2C_NUM_0    // Sử dụng bộ ngoại vi I2C số 0 của ESP32
+#define OLED_I2C_ADDRESS            0x3C         // Địa chỉ I2C phổ thông của màn hình OLED SSD1306
+#define I2C_MASTER_FREQ_HZ          400000       // Tốc độ Bus I2C: Fast Mode (400kHz) giúp hiển thị mượt mà
+#define I2C_MASTER_TX_BUF_DISABLE   0            // Không cần bộ đệm TX
+#define I2C_MASTER_RX_BUF_DISABLE   0            // Không cần bộ đệm RX
 
-// --- CÁC HÀM LOW-LEVEL TRUYỀN DỮ LIỆU QUA SPI ---
+// Kích thước màn hình OLED đơn sắc
+#define OLED_WIDTH                  128
+#define OLED_HEIGHT                 64
 
-// Hàm gửi Lệnh (Command) tới màn hình (Chân D/C kéo xuống LOW)
-static void tft_send_cmd(uint8_t cmd) {
-    gpio_set_level(PIN_DISPLAY_DC, 0); 
-    spi_transaction_t t = {
-        .length = 8,
-        .tx_buffer = &cmd,
-    };
-    spi_device_transmit(display_spi_handle, &t);
-}
-
-// Hàm gửi Dữ liệu (Data) tới màn hình (Chân D/C kéo lên HIGH)
-static void tft_send_data(uint8_t data) {
-    gpio_set_level(PIN_DISPLAY_DC, 1); 
-    spi_transaction_t t = {
-        .length = 8,
-        .tx_buffer = &data,
-    };
-    spi_device_transmit(display_spi_handle, &t);
-}
-
-// Hàm gửi một mảng Dữ liệu liên tục (Data buffer)
-static void tft_send_data_buf(const uint8_t *buf, size_t len) {
-    if (len == 0) return;
-    gpio_set_level(PIN_DISPLAY_DC, 1);
-    spi_transaction_t t = {
-        .length = len * 8,
-        .tx_buffer = buf,
-    };
-    spi_device_transmit(display_spi_handle, &t);
-}
-
-// Hàm thiết lập vùng hiển thị (Window) trên màn hình TFT để vẽ/viết chữ
-static void tft_set_address_window(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1) {
-    tft_send_cmd(0x2A); // Column Address Set
-    tft_send_data(x0 >> 8);
-    tft_send_data(x0 & 0xFF);
-    tft_send_data(x1 >> 8);
-    tft_send_data(x1 & 0xFF);
-
-    tft_send_cmd(0x2B); // Row Address Set
-    tft_send_data(y0 >> 8);
-    tft_send_data(y0 & 0xFF);
-    tft_send_data(y1 >> 8);
-    tft_send_data(y1 & 0xFF);
-
-    tft_send_cmd(0x2C); // Memory Write (Bắt đầu nạp màu)
-}
-
-// --- FONT CHỮ ĐƠN GIẢN (ASCII 8x16) ĐỂ IN TEXT LÊN TFT ---
-// Ma trận pixel cho các ký tự từ Space (0x20) đến '~' (0x7E)
-extern const uint8_t font_8x16[][16]; 
-// Ghi chú: Nếu chưa có file font, bạn có thể định nghĩa một mảng font 8x16 tiêu chuẩn tại đây, 
-// hoặc tạm thời dùng hàm vẽ ký tự thô. Để đảm bảo code biên dịch được ngay, ta dùng một font mẫu tối giản:
-const uint8_t font_8x16[][16] = {
-    [0x20 - 0x20] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}, // Khoảng trắng
-    ['0' - 0x20]  = {0x00,0x00,0x3c,0x42,0x42,0x42,0x42,0x42,0x42,0x42,0x42,0x42,0x3c,0x00,0x00,0x00}, // Số 0
-    ['A' - 0x20]  = {0x00,0x00,0x18,0x24,0x42,0x42,0x7e,0x42,0x42,0x42,0x42,0x42,0x42,0x00,0x00,0x00}, // Chữ A
-    // ... Bạn có thể bổ sung đầy đủ bảng font 8x16 chuẩn ASCII vào đây hoặc include từ file font.h ...
+// --- BẢNG FONT CHỮ TIÊU CHUẨN 5x7 (ASCII từ ' ' đến 'Z') ---
+// Ma trận pixel lưu hình dáng các ký tự cơ bản, chữ IN HOA và chữ số
+static const uint8_t font_5x7[][5] = {
+    {0x00, 0x00, 0x00, 0x00, 0x00}, // Khoảng trắng (Space)
+    {0x00, 0x00, 0x5f, 0x00, 0x00}, // !
+    {0x00, 0x07, 0x00, 0x07, 0x00}, // "
+    {0x14, 0x7f, 0x14, 0x7f, 0x14}, // #
+    {0x24, 0x2a, 0x7f, 0x2a, 0x12}, // $
+    {0x23, 0x13, 0x08, 0x64, 0x62}, // %
+    {0x36, 0x49, 0x55, 0x22, 0x50}, // &
+    {0x00, 0x05, 0x03, 0x00, 0x00}, // '
+    {0x00, 0x1c, 0x22, 0x41, 0x00}, // (
+    {0x00, 0x41, 0x22, 0x1c, 0x00}, // )
+    {0x14, 0x08, 0x3e, 0x08, 0x14}, // *
+    {0x08, 0x08, 0x3e, 0x08, 0x08}, // +
+    {0x00, 0x50, 0x30, 0x00, 0x00}, // ,
+    {0x08, 0x08, 0x08, 0x08, 0x08}, // -
+    {0x00, 0x60, 0x60, 0x00, 0x00}, // .
+    {0x20, 0x10, 0x08, 0x04, 0x02}, // /
+    {0x3e, 0x51, 0x49, 0x45, 0x3e}, // 0
+    {0x00, 0x42, 0x7f, 0x40, 0x00}, // 1
+    {0x42, 0x61, 0x51, 0x49, 0x46}, // 2
+    {0x21, 0x41, 0x45, 0x4b, 0x31}, // 3
+    {0x18, 0x14, 0x12, 0x7f, 0x10}, // 4
+    {0x27, 0x45, 0x45, 0x45, 0x39}, // 5
+    {0x3c, 0x4a, 0x49, 0x49, 0x30}, // 6
+    {0x01, 0x71, 0x09, 0x05, 0x03}, // 7
+    {0x36, 0x49, 0x49, 0x49, 0x36}, // 8
+    {0x06, 0x49, 0x49, 0x29, 0x1e}, // 9
+    {0x00, 0x36, 0x36, 0x00, 0x00}, // :
+    {0x00, 0x56, 0x36, 0x00, 0x00}, // ;
+    {0x08, 0x14, 0x22, 0x41, 0x00}, // <
+    {0x14, 0x14, 0x14, 0x14, 0x14}, // =
+    {0x00, 0x41, 0x22, 0x14, 0x08}, // >
+    {0x02, 0x01, 0x51, 0x09, 0x06}, // ?
+    {0x32, 0x49, 0x79, 0x41, 0x3e}, // @
+    {0x7e, 0x11, 0x11, 0x11, 0x7e}, // A
+    {0x7f, 0x49, 0x49, 0x49, 0x36}, // B
+    {0x3e, 0x41, 0x41, 0x41, 0x22}, // C
+    {0x7f, 0x41, 0x41, 0x22, 0x1c}, // D
+    {0x7f, 0x49, 0x49, 0x49, 0x41}, // E
+    {0x7f, 0x09, 0x09, 0x09, 0x01}, // F
+    {0x3e, 0x41, 0x49, 0x49, 0x7a}, // G
+    {0x7f, 0x08, 0x08, 0x08, 0x7f}, // H
+    {0x00, 0x41, 0x7f, 0x41, 0x00}, // I
+    {0x20, 0x40, 0x41, 0x3f, 0x01}, // J
+    {0x7f, 0x08, 0x14, 0x22, 0x41}, // K
+    {0x7f, 0x40, 0x40, 0x40, 0x40}, // L
+    {0x7f, 0x02, 0x0c, 0x02, 0x7f}, // M
+    {0x7f, 0x04, 0x08, 0x10, 0x7f}, // N
+    {0x3e, 0x41, 0x41, 0x41, 0x3e}, // O
+    {0x7f, 0x09, 0x09, 0x09, 0x06}, // P
+    {0x3e, 0x41, 0x51, 0x21, 0x5e}, // Q
+    {0x7f, 0x09, 0x19, 0x29, 0x46}, // R
+    {0x46, 0x49, 0x49, 0x49, 0x31}, // S
+    {0x01, 0x01, 0x7f, 0x01, 0x01}, // T
+    {0x3f, 0x40, 0x40, 0x40, 0x3f}, // U
+    {0x1f, 0x20, 0x40, 0x20, 0x1f}, // V
+    {0x3f, 0x40, 0x38, 0x40, 0x3f}, // W
+    {0x63, 0x14, 0x08, 0x14, 0x63}, // X
+    {0x07, 0x08, 0x70, 0x08, 0x07}, // Y
+    {0x61, 0x51, 0x49, 0x45, 0x43}  // Z
 };
 
-// Hàm vẽ một ký tự (Character) lên màn hình tại tọa độ (x, y) với màu sắc chỉ định
-static void tft_draw_char(uint16_t x, uint16_t y, char c, uint16_t color, uint16_t bg_color) {
-    if (c < 0x20 || c > 0x7E) c = ' '; // Vượt quá bảng font thì đổi thành khoảng trắng
-    uint8_t c_index = c - 0x20;
-    
-    // Tạo buffer màu cho 1 ký tự 8x16 (mỗi pixel chiếm 2 byte màu RGB565)
-    uint16_t line_buf[8]; 
+// --- CÁC HÀM GIAO TIẾP TẦNG THẤP (LOW-LEVEL I2C) ---
 
-    for (int row = 0; row < 16; row++) {
-        uint8_t bits = font_8x16[c_index][row];
-        for (int col = 0; col < 8; col++) {
-            // Kiểm tra bit từ MSB tới LSB để quyết định tô màu chữ hay màu nền
-            if (bits & (0x80 >> col)) {
-                line_buf[col] = (color >> 8) | (color << 8); // Swap byte cho đúng định dạng SPI TFT
-            } else {
-                line_buf[col] = (bg_color >> 8) | (bg_color << 8);
-            }
-        }
-        tft_set_address_window(x, y + row, x + 7, y + row);
-        tft_send_data_buf((uint8_t*)line_buf, 8 * 2);
+/**
+ * @brief Gửi một lệnh cấu hình (Command) tới OLED qua I2C
+ */
+static esp_err_t oled_send_cmd(uint8_t cmd) {
+    i2c_cmd_handle_t link = i2c_cmd_link_create();
+    i2c_master_start(link);
+    i2c_master_write_byte(link, (OLED_I2C_ADDRESS << 1) | I2C_MASTER_WRITE, true);
+    i2c_master_write_byte(link, 0x00, true); // Control byte: Co = 0, D/C = 0 -> Báo gửi Lệnh
+    i2c_master_write_byte(link, cmd, true);
+    i2c_master_stop(link);
+    esp_err_t ret = i2c_master_cmd_begin(I2C_MASTER_NUM, link, pdMS_TO_TICKS(10));
+    i2c_cmd_link_delete(link);
+    return ret;
+}
+
+/**
+ * @brief Gửi một byte dữ liệu pixel (Data) tới OLED qua I2C
+ */
+static esp_err_t oled_send_data(uint8_t data) {
+    i2c_cmd_handle_t link = i2c_cmd_link_create();
+    i2c_master_start(link);
+    i2c_master_write_byte(link, (OLED_I2C_ADDRESS << 1) | I2C_MASTER_WRITE, true);
+    i2c_master_write_byte(link, 0x40, true); // Control byte: Co = 0, D/C = 1 -> Báo gửi Dữ liệu
+    i2c_master_write_byte(link, data, true);
+    i2c_master_stop(link);
+    esp_err_t ret = i2c_master_cmd_begin(I2C_MASTER_NUM, link, pdMS_TO_TICKS(10));
+    i2c_cmd_link_delete(link);
+    return ret;
+}
+
+/**
+ * @brief Hàm vẽ một ký tự đơn từ mảng Font lên màn hình
+ */
+static void oled_write_char(char c) {
+    // Nếu ký tự nằm ngoài vùng hỗ trợ (chỉ nhận chữ IN HOA, số, ký tự đặc biệt)
+    if (c < 32 || c > 90) c = ' '; 
+    uint8_t index = c - 32;
+
+    for (uint8_t i = 0; i < 5; i++) {
+        oled_send_data(font_5x7[index][i]); // Đẩy 5 cột pixel tạo thành chữ
+    }
+    oled_send_data(0x00); // Thêm 1 cột trống làm khoảng cách an toàn giữa 2 chữ
+}
+
+/**
+ * @brief Hàm in chuỗi văn bản lên một Page (Hàng) chỉ định của OLED
+ * @param page Chỉ số hàng (0 đến 7)
+ * @param col Chỉ số cột (0 đến 127)
+ */
+static void oled_print_string(uint8_t page, uint8_t col, const char* str) {
+    if (page > 7) page = 7;
+    oled_send_cmd(0xB0 + page);                    // Chọn trang cần hiển thị
+    oled_send_cmd(col & 0x0F);                     // Cấu hình con trỏ cột thấp
+    oled_send_cmd(0x10 | ((col >> 4) & 0x0F));      // Cấu hình con trỏ cột cao
+
+    while (*str) {
+        oled_write_char(*str);
+        str++;
     }
 }
 
-// --- IMPLEMENTATION CÁC HÀM TRONG ĐỐI TƯỢNG DRIVER ---
+// --- IMPLEMENTATION CÁC HÀM LOGIC CỦA DRIVER ---
 
 static void Display_Init_HW(void) {
-    ESP_LOGI(TAG_DISP, "Initializing TFT Display via SPI Bus...");
+    ESP_LOGI(TAG_DISP, "Initializing OLED Display via I2C Bus...");
 
-    // 1. Cấu hình chân điều khiển Data/Command (D/C) và Reset (RST)
-    gpio_config_t io_conf = {
-        .pin_bit_mask = (1ULL << PIN_DISPLAY_DC) | (1ULL << PIN_DISPLAY_RST),
-        .mode = GPIO_MODE_OUTPUT,
-        .pull_up_en = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_DISABLE
-    };
-    gpio_config(&io_conf);
-
-    // 2. Đăng ký màn hình TFT vào Bus SPI2 chung đã khởi tạo bên RFID
-    spi_device_interface_config_t devcfg = {
-        .clock_speed_hz = 10 * 1000 * 1000, // Tốc độ SPI 10MHz mượt mà cho TFT
-        .mode = 0,                          // SPI Mode 0 trùng với RFID
-        .spics_io_num = PIN_DISPLAY_CS,     // Chân CS riêng biệt để phân biệt với RFID
-        .queue_size = 7
+    // 1. Định nghĩa cấu hình phần cứng cho bộ I2C Master của ESP32
+    i2c_config_t conf = {
+        .mode = I2C_MODE_MASTER,
+        .sda_io_num = PIN_RTC_SDA,          // Chân SDA (G23) lấy từ system_config.h
+        .sda_pullup_en = GPIO_PULLUP_ENABLE, // Kích hoạt điện trở kéo lên nội
+        .scl_io_num = PIN_RTC_SCL,          // Chân SCL (G19) lấy từ system_config.h
+        .scl_pullup_en = GPIO_PULLUP_ENABLE,
+        .master.clk_speed = I2C_MASTER_FREQ_HZ,
     };
     
-    // Thêm thiết bị vào Bus SPI2_HOST (Bus này do rfid_driver khởi tạo trước)
-    spi_bus_add_device(SPI2_HOST, &devcfg, &display_spi_handle);
+   
 
-    // 3. Thực hiện chu trình Reset cứng màn hình
-    gpio_set_level(PIN_DISPLAY_RST, 0);
-    vTaskDelay(pdMS_TO_TICKS(20));
-    gpio_set_level(PIN_DISPLAY_RST, 1);
-    vTaskDelay(pdMS_TO_TICKS(50));
-
-    // 4. Gửi chuỗi byte lệnh khởi tạo chuẩn cho chip TFT (Ví dụ: ST7735)
-    tft_send_cmd(0x01); // Software Reset
-    vTaskDelay(pdMS_TO_TICKS(120));
-
-    tft_send_cmd(0x11); // Sleep Out
-    vTaskDelay(pdMS_TO_TICKS(120));
-
-    tft_send_cmd(0x3A); // Set Interface Pixel Format
-    tft_send_data(0x05); // Định dạng màu 16-bit/pixel (RGB565)
-
-    tft_send_cmd(0x29); // Display On
-    vTaskDelay(pdMS_TO_TICKS(20));
+    // 2. Gửi chuỗi tập lệnh Hex cấu hình bắt buộc để khởi động IC SSD1306
+    vTaskDelay(pdMS_TO_TICKS(100)); // Đợi màn hình ổn định nguồn
     
-    // Xóa màn hình về màu đen sau khi bật
+    oled_send_cmd(0xAE); // Tắt màn hình tạm thời
+    oled_send_cmd(0x20); // Đặt chế độ định địa chỉ bộ nhớ (Memory Addressing Mode)
+    oled_send_cmd(0x10); // Chọn chế độ Page Addressing Mode giống LCD thông thường
+    oled_send_cmd(0xB0); // Reset con trỏ về Page 0
+    oled_send_cmd(0xC8); // Quét hàng ngược (Lật đúng chiều màn hình không bị ngược chữ)
+    oled_send_cmd(0x00); // Set con trỏ cột thấp
+    oled_send_cmd(0x10); // Set con trỏ cột cao
+    oled_send_cmd(0x40); // Set dòng bắt đầu hiển thị trong RAM
+    oled_send_cmd(0x81); // Thiết lập độ tương phản (Contrast)
+    oled_send_cmd(0x7F); // Mức trung bình
+    oled_send_cmd(0xA1); // Đặt hướng cột xuôi/ngược (Lật chiều ngang)
+    oled_send_cmd(0xA6); // Chế độ hiển thị bình thường (Không đảo ngược màu đen/trắng)
+    oled_send_cmd(0xA8); // Set tỷ lệ Multiplex Ratio
+    oled_send_cmd(0x3F); // 1/64 duty tương ứng 64 hàng pixel
+    oled_send_cmd(0xA4); // Xuất nội dung ra dựa theo dữ liệu nạp trong RAM
+    oled_send_cmd(0xD3); // Đặt độ lệch màn hình (Display Offset)
+    oled_send_cmd(0x00); // Không lệch
+    oled_send_cmd(0xD5); // Đặt tần số quét màn hình
+    oled_send_cmd(0x80);
+    oled_send_cmd(0x8D); // Kích hoạt mạch sạc bơm nguồn tích hợp (Charge Pump)
+    oled_send_cmd(0x14); // Bật mạch sạc (Nếu thiếu lệnh này OLED sẽ không thể sáng lên)
+    oled_send_cmd(0xAF); // CHÍNH THỨC BẬT MÀN HÌNH
+
+    // Xóa sạch rác trong RAM màn hình khi vừa mở nguồn
     Display_Clear_HW();
-    ESP_LOGI(TAG_DISP, "TFT Display initialized successfully.");
+    ESP_LOGI(TAG_DISP, "OLED I2C Display initialized successfully.");
 }
 
 static void Display_Clear_HW(void) {
-    // Xóa toàn bộ màn hình bằng cách tô màu Đen (Màu RGB565: 0x0000)
-    // Giả định màn hình có độ phân giải phổ thông 128x160 (Thay đổi theo màn hình của bạn)
-    uint16_t width = 128;
-    uint16_t height = 160;
-    
-    tft_set_address_window(0, 0, width - 1, height - 1);
-
-    // Khởi tạo một hàng pixel màu đen để đẩy nhanh qua DMA/SPI thay vì đẩy từng pixel đơn lẻ
-    uint16_t *row_buf = malloc(width * sizeof(uint16_t));
-    if (row_buf == NULL) return;
-    memset(row_buf, 0, width * sizeof(uint16_t));
-
-    for (int i = 0; i < height; i++) {
-        tft_send_data_buf((uint8_t*)row_buf, width * 2);
+    // Quét qua toàn bộ 8 Page của OLED (Mỗi page dày 8 pixel: 8 * 8 = 64 hàng)
+    for (uint8_t page = 0; page < 8; page++) {
+        oled_send_cmd(0xB0 + page); // Nhảy sang trang tiếp theo
+        oled_send_cmd(0x00);        // Đưa con trỏ cột về vị trí 0
+        oled_send_cmd(0x10);
+        for (uint8_t i = 0; i < OLED_WIDTH; i++) {
+            oled_send_data(0x00);   // Ghi đè toàn bộ byte bằng 0x00 để tắt hết điểm ảnh (Màu đen)
+        }
     }
-
-    free(row_buf);
 }
 
 static void Display_PrintText_HW(uint8_t x, uint8_t y, const char *text) {
     if (text == NULL) return;
-
-    // Quy đổi tọa độ: Ký tự font 8x16. 
-    // Nếu tầng trên truyền x, y theo dạng "Cột, Hàng" của LCD1602, ta nhân tương ứng sang Pixel của TFT.
-    uint16_t pixel_x = x * 8; 
-    uint16_t pixel_y = y * 16;
     
-    uint16_t text_color = 0xFFFF; // Màu chữ: Trắng
-    uint16_t bg_color   = 0x0000; // Màu nền chữ: Đen
+    // Ánh xạ tham số (x, y) từ tầng trên truyền xuống:
+    // Vì ký tự ma trận rộng khoảng 6 pixel, ta nhân 'x' với 6 để dịch vị trí cột pixel
+    // Tham số 'y' tương ứng với dòng (Page từ 0 đến 7)
+    uint8_t pixel_col = x * 6;
+    uint8_t page_row  = y;
 
-    while (*text) {
-        // Kiểm tra tràn màn hình theo chiều ngang (giả định màn rộng 128 pixel)
-        if (pixel_x + 8 > 128) {
-            pixel_x = 0;
-            pixel_y += 16; // Tự động xuống dòng
-        }
-        // Kiểm tra tràn màn hình theo chiều dọc (giả định màn cao 160 pixel)
-        if (pixel_y + 16 > 160) {
-            break; 
-        }
+    if (pixel_col >= OLED_WIDTH)  pixel_col = 0;
+    if (page_row >= 8)            page_row = 7;
 
-        tft_draw_char(pixel_x, pixel_y, *text, text_color, bg_color);
-        pixel_x += 8; // Dịch sang phải 8 pixel cho ký tự tiếp theo
-        text++;
-    }
+    oled_print_string(page_row, pixel_col, text);
 }
 
 static void Display_ShowStatus_HW(const char *status) {
     Display_Clear_HW();
-    // In chuỗi trạng thái ra chính giữa màn hình (Ví dụ: dòng số 3)
-    Display_PrintText_HW(0, 3, status);
+    // Tiêu đề cố định ở Hàng số 0
+    oled_print_string(0, 0, "=== SYSTEM STATUS ===");
+    
+    // In nội dung trạng thái (LOCKED / UNLOCKED) ra hàng số 3, căn lề vào cột số 20 pixel
+    oled_print_string(3, 20, status);
+    
+    // Ghi chú ở hàng cuối cùng (Hàng số 7)
+    oled_print_string(7, 0, "Ghi chu: Nhap pass...");
 }
 
-// Đối tượng Driver cấu trúc liên kết trỏ hàm
+// Đối tượng Driver cấu trúc liên kết trỏ hàm được giữ nguyên tên 
+// để các file xử lý logic tầng trên (như main.c) gọi hàm không bị lỗi
 const Display_Driver_t ESP32_Display_Driver = {
     .Init       = Display_Init_HW,
     .Clear      = Display_Clear_HW,

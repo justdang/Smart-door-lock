@@ -21,22 +21,23 @@
 #define PIN_KEYPAD_C4       32
 
 // ==========================================
-// 3. CẤU HÌNH BUS SPI CHUNG (RFID & TFT DISPLAY)
+// 3. CẤU HÌNH BUS SPI RFID 
 // ==========================================
-#define PIN_SPI_MISO        12  // Nối tới MISO của RC522 và SDO(MISO) của TFT
-#define PIN_SPI_MOSI        13  // Nối tới MOSI của RC522 và SDI(MOSI) của TFT
-#define PIN_SPI_CLK         14  // Nối tới SCK của RC522 và SCL(CLK) của TFT
-
-// Chân chọn chip riêng biệt (CS) để phân loại thiết bị trên Bus SPI
+#define PIN_SPI_MISO        12  
+#define PIN_SPI_MOSI        13  
+#define PIN_SPI_CLK         14  
 #define PIN_RFID_CS         15
 #define PIN_RFID_RST        4
 
-#define PIN_DISPLAY_CS      2   
-#define PIN_DISPLAY_DC      16  
-#define PIN_DISPLAY_RST     0   // Bổ sung chân Reset riêng cho màn hình TFT (hoặc nối lên 3.3V/nối chung chân 4)
+// ==========================================
+// CHÂN OLED BỎ
+// ==========================================
+#define PIN_DISPLAY_CS      -1   
+#define PIN_DISPLAY_DC      -1  
+#define PIN_DISPLAY_RST     -1
 
 // ==========================================
-// 4. CẤU HÌNH MODULE RTC (I2C)
+// 4. CẤU HÌNH MODULE RTC (I2C) VÀ OLED CHUNG
 // ==========================================
 #define PIN_RTC_SDA         22  
 #define PIN_RTC_SCL         5   
