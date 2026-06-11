@@ -1,11 +1,15 @@
 #include "display_driver.h"
 #include "system_config.h"
+<<<<<<< Updated upstream
 #include "driver/spi_master.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+=======
+#include "driver/i2c.h" //khong co thu vien nay
+>>>>>>> Stashed changes
 
 #define TAG_DISP "DISPLAY_DRIVER"
 

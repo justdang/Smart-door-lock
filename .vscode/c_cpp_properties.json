@@ -223,7 +223,22 @@
                 "C:/Users/DELL/.platformio/packages/framework-espidf/components/perfmon/include",
                 "C:/Users/DELL/.platformio/packages/framework-espidf/components/rt/include",
                 "C:/Users/DELL/.platformio/packages/framework-espidf/components/spiffs/include",
-                "D:/Study/embbeded/Smart-door-lock/components/crypto/include",
+                "D:/Study/embbeded/Smart-door-lock/components/service/auth/include",
+                "D:/Study/embbeded/Smart-door-lock/components/service/common/include",
+                "D:/Study/embbeded/Smart-door-lock/components/service/display_service/include",
+                "D:/Study/embbeded/Smart-door-lock/components/service/keypad_service/include",
+                "D:/Study/embbeded/Smart-door-lock/components/service/rfid_service/include",
+                "D:/Study/embbeded/Smart-door-lock/components/service/rtc_service/include",
+                "D:/Study/embbeded/Smart-door-lock/components/service/servo_service/include",
+                "D:/Study/embbeded/Smart-door-lock/components/service/storage/include",
+                "D:/Study/embbeded/Smart-door-lock/components/service/zigbee/include",
+                "${IDF_PATH}/components/freertos/FreeRTOS-Kernel/include",
+                "${IDF_PATH}/components/freertos/esp_additions/include",
+                "${IDF_PATH}/components/esp_common/include",
+                "${IDF_PATH}/components/driver/include",
+                "${IDF_PATH}/components/hal/include",
+                "${IDF_PATH}/components/esp_hw_support/include",
+                "${IDF_PATH}/components/soc/${config:idf.adapterTargetName}/include"
                 ""
             ],
             "browse": {

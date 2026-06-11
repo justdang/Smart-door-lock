@@ -1,4 +1,4 @@
-idf_component_register(
+ idf_component_register(
     SRCS
         "keypad_service.c"
 

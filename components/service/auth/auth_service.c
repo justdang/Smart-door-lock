@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
+#include "auth_service.h" 
 #include "keypad_service.h"
 #include "zigbee_service.h"
 #include "rfid_service.h"
