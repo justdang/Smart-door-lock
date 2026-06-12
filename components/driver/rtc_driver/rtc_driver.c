@@ -1,6 +1,6 @@
 #include "rtc_driver.h"
 #include "system_config.h"
-#include "driver/i2c.h"
+#include "i2c.h" //low level
 
 #define RTC_I2C_ADDR 0x68 // Địa chỉ mặc định của DS3231
 

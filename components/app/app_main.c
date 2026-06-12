@@ -16,26 +16,21 @@
 /* --------------------------------------------------------
    Callbacks — bridge from service layer to application layer
    -------------------------------------------------------- */
-static void on_auth_event(AppEvent event)
-{
+static void on_auth_event(AppEvent event){
     AppEventMessage msg = { .event = event };
     system_event_post(&msg);
 }
 
-static void on_lock_event(AppEvent event)
-{
+static void on_lock_event(AppEvent event){
+    AppEventMessage msg = { .event = event };
+    system_event_post(&msg);
+}
+static void on_autolock_event(AppEvent event){
     AppEventMessage msg = { .event = event };
     system_event_post(&msg);
 }
 
-static void on_autolock_event(AppEvent event)
-{
-    AppEventMessage msg = { .event = event };
-    system_event_post(&msg);
-}
-
-void app_main(void)
-{
+void app_main(void){
     /* ── 1. storage first — everything else depends on it ── */
     storage_init();
     /* ── 2. service layer — register callbacks ── */

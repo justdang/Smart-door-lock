@@ -1,8 +1,13 @@
 #include "rfid_driver.h"
 #include "system_config.h"
+<<<<<<< Updated upstream
 #include "driver/spi_master.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
+=======
+#include "driver/spi_master.h" //low level
+#include "driver/gpio.h" //low level
+>>>>>>> Stashed changes
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"

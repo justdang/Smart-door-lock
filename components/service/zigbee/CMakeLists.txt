@@ -1,8 +1,8 @@
 idf_component_register(
     SRCS
-        "keypad_driver.c"
-
+        "zigbee_service.c"
     INCLUDE_DIRS
         "include"
+    REQUIRES 
         "freertos"
 )

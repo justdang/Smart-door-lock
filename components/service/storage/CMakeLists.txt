@@ -4,5 +4,7 @@ idf_component_register(
     PRIV_INCLUDE_DIRS ".."
     # REQUIRES nvs_flash
     # REQUIRES nvs
-    REQUIRES common
+    REQUIRES 
+        common
+        freertos
 )

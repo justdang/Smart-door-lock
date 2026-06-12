@@ -1,6 +1,6 @@
 #include "display_driver.h"
 #include "system_config.h"
-#include "driver/i2c.h"
+#include "driver/i2c.h" 
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include <string.h>
@@ -21,7 +21,6 @@
 #define OLED_HEIGHT                 64
 
 // --- BẢNG FONT CHỮ TIÊU CHUẨN 5x7 (ASCII từ ' ' đến 'Z') ---
-// Ma trận pixel lưu hình dáng các ký tự cơ bản, chữ IN HOA và chữ số
 static const uint8_t font_5x7[][5] = {
     {0x00, 0x00, 0x00, 0x00, 0x00}, // Khoảng trắng (Space)
     {0x00, 0x00, 0x5f, 0x00, 0x00}, // !
@@ -86,14 +85,11 @@ static const uint8_t font_5x7[][5] = {
 
 // --- CÁC HÀM GIAO TIẾP TẦNG THẤP (LOW-LEVEL I2C) ---
 
-/**
- * @brief Gửi một lệnh cấu hình (Command) tới OLED qua I2C
- */
 static esp_err_t oled_send_cmd(uint8_t cmd) {
     i2c_cmd_handle_t link = i2c_cmd_link_create();
     i2c_master_start(link);
     i2c_master_write_byte(link, (OLED_I2C_ADDRESS << 1) | I2C_MASTER_WRITE, true);
-    i2c_master_write_byte(link, 0x00, true); // Control byte: Co = 0, D/C = 0 -> Báo gửi Lệnh
+    i2c_master_write_byte(link, 0x00, true); 
     i2c_master_write_byte(link, cmd, true);
     i2c_master_stop(link);
     esp_err_t ret = i2c_master_cmd_begin(I2C_MASTER_NUM, link, pdMS_TO_TICKS(10));
@@ -101,14 +97,11 @@ static esp_err_t oled_send_cmd(uint8_t cmd) {
     return ret;
 }
 
-/**
- * @brief Gửi một byte dữ liệu pixel (Data) tới OLED qua I2C
- */
 static esp_err_t oled_send_data(uint8_t data) {
     i2c_cmd_handle_t link = i2c_cmd_link_create();
     i2c_master_start(link);
     i2c_master_write_byte(link, (OLED_I2C_ADDRESS << 1) | I2C_MASTER_WRITE, true);
-    i2c_master_write_byte(link, 0x40, true); // Control byte: Co = 0, D/C = 1 -> Báo gửi Dữ liệu
+    i2c_master_write_byte(link, 0x40, true); 
     i2c_master_write_byte(link, data, true);
     i2c_master_stop(link);
     esp_err_t ret = i2c_master_cmd_begin(I2C_MASTER_NUM, link, pdMS_TO_TICKS(10));
@@ -116,30 +109,21 @@ static esp_err_t oled_send_data(uint8_t data) {
     return ret;
 }
 
-/**
- * @brief Hàm vẽ một ký tự đơn từ mảng Font lên màn hình
- */
 static void oled_write_char(char c) {
-    // Nếu ký tự nằm ngoài vùng hỗ trợ (chỉ nhận chữ IN HOA, số, ký tự đặc biệt)
     if (c < 32 || c > 90) c = ' '; 
     uint8_t index = c - 32;
 
     for (uint8_t i = 0; i < 5; i++) {
-        oled_send_data(font_5x7[index][i]); // Đẩy 5 cột pixel tạo thành chữ
+        oled_send_data(font_5x7[index][i]); 
     }
-    oled_send_data(0x00); // Thêm 1 cột trống làm khoảng cách an toàn giữa 2 chữ
+    oled_send_data(0x00); 
 }
 
-/**
- * @brief Hàm in chuỗi văn bản lên một Page (Hàng) chỉ định của OLED
- * @param page Chỉ số hàng (0 đến 7)
- * @param col Chỉ số cột (0 đến 127)
- */
 static void oled_print_string(uint8_t page, uint8_t col, const char* str) {
     if (page > 7) page = 7;
-    oled_send_cmd(0xB0 + page);                    // Chọn trang cần hiển thị
-    oled_send_cmd(col & 0x0F);                     // Cấu hình con trỏ cột thấp
-    oled_send_cmd(0x10 | ((col >> 4) & 0x0F));      // Cấu hình con trỏ cột cao
+    oled_send_cmd(0xB0 + page);                    
+    oled_send_cmd(col & 0x0F);                     
+    oled_send_cmd(0x10 | ((col >> 4) & 0x0F));      
 
     while (*str) {
         oled_write_char(*str);
@@ -152,20 +136,9 @@ static void oled_print_string(uint8_t page, uint8_t col, const char* str) {
 static void Display_Init_HW(void) {
     ESP_LOGI(TAG_DISP, "Initializing OLED Display via I2C Bus...");
 
-    // 1. Định nghĩa cấu hình phần cứng cho bộ I2C Master của ESP32
-    i2c_config_t conf = {
-        .mode = I2C_MODE_MASTER,
-        .sda_io_num = PIN_RTC_SDA,          // Chân SDA (G23) lấy từ system_config.h
-        .sda_pullup_en = GPIO_PULLUP_ENABLE, // Kích hoạt điện trở kéo lên nội
-        .scl_io_num = PIN_RTC_SCL,          // Chân SCL (G19) lấy từ system_config.h
-        .scl_pullup_en = GPIO_PULLUP_ENABLE,
-        .master.clk_speed = I2C_MASTER_FREQ_HZ,
-    };
-    
-   
+    // ĐÃ XÓA KHỐI CÀI ĐẶT DRIVER I2C Ở ĐÂY ĐỂ DÙNG CHUNG VỚI RTC ĐÚNG THEO YÊU CẦU TRÁNH TREO MẠCH
 
-    // 2. Gửi chuỗi tập lệnh Hex cấu hình bắt buộc để khởi động IC SSD1306
-    vTaskDelay(pdMS_TO_TICKS(100)); // Đợi màn hình ổn định nguồn
+    vTaskDelay(pdMS_TO_TICKS(100)); 
     
     oled_send_cmd(0xAE); // Tắt màn hình tạm thời
     oled_send_cmd(0x20); // Đặt chế độ định địa chỉ bộ nhớ (Memory Addressing Mode)
@@ -187,22 +160,20 @@ static void Display_Init_HW(void) {
     oled_send_cmd(0xD5); // Đặt tần số quét màn hình
     oled_send_cmd(0x80);
     oled_send_cmd(0x8D); // Kích hoạt mạch sạc bơm nguồn tích hợp (Charge Pump)
-    oled_send_cmd(0x14); // Bật mạch sạc (Nếu thiếu lệnh này OLED sẽ không thể sáng lên)
+    oled_send_cmd(0x14); // Bật mạch sạc
     oled_send_cmd(0xAF); // CHÍNH THỨC BẬT MÀN HÌNH
 
-    // Xóa sạch rác trong RAM màn hình khi vừa mở nguồn
     Display_Clear_HW();
     ESP_LOGI(TAG_DISP, "OLED I2C Display initialized successfully.");
 }
 
 static void Display_Clear_HW(void) {
-    // Quét qua toàn bộ 8 Page của OLED (Mỗi page dày 8 pixel: 8 * 8 = 64 hàng)
     for (uint8_t page = 0; page < 8; page++) {
-        oled_send_cmd(0xB0 + page); // Nhảy sang trang tiếp theo
-        oled_send_cmd(0x00);        // Đưa con trỏ cột về vị trí 0
+        oled_send_cmd(0xB0 + page); 
+        oled_send_cmd(0x00);        
         oled_send_cmd(0x10);
         for (uint8_t i = 0; i < OLED_WIDTH; i++) {
-            oled_send_data(0x00);   // Ghi đè toàn bộ byte bằng 0x00 để tắt hết điểm ảnh (Màu đen)
+            oled_send_data(0x00);   
         }
     }
 }
@@ -210,9 +181,6 @@ static void Display_Clear_HW(void) {
 static void Display_PrintText_HW(uint8_t x, uint8_t y, const char *text) {
     if (text == NULL) return;
     
-    // Ánh xạ tham số (x, y) từ tầng trên truyền xuống:
-    // Vì ký tự ma trận rộng khoảng 6 pixel, ta nhân 'x' với 6 để dịch vị trí cột pixel
-    // Tham số 'y' tương ứng với dòng (Page từ 0 đến 7)
     uint8_t pixel_col = x * 6;
     uint8_t page_row  = y;
 
@@ -224,18 +192,11 @@ static void Display_PrintText_HW(uint8_t x, uint8_t y, const char *text) {
 
 static void Display_ShowStatus_HW(const char *status) {
     Display_Clear_HW();
-    // Tiêu đề cố định ở Hàng số 0
     oled_print_string(0, 0, "=== SYSTEM STATUS ===");
-    
-    // In nội dung trạng thái (LOCKED / UNLOCKED) ra hàng số 3, căn lề vào cột số 20 pixel
     oled_print_string(3, 20, status);
-    
-    // Ghi chú ở hàng cuối cùng (Hàng số 7)
     oled_print_string(7, 0, "Ghi chu: Nhap pass...");
 }
 
-// Đối tượng Driver cấu trúc liên kết trỏ hàm được giữ nguyên tên 
-// để các file xử lý logic tầng trên (như main.c) gọi hàm không bị lỗi
 const Display_Driver_t ESP32_Display_Driver = {
     .Init       = Display_Init_HW,
     .Clear      = Display_Clear_HW,
