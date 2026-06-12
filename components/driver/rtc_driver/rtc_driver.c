@@ -11,8 +11,10 @@ static void RTC_Init_HW(void) {
         .scl_io_num = PIN_RTC_SCL,
         .sda_pullup_en = GPIO_PULLUP_ENABLE,
         .scl_pullup_en = GPIO_PULLUP_ENABLE,
-        .master.clk_speed = 100000,
+        .clk_flags = 0, 
     };
+    conf.master.clk_speed = 100000; // Đưa tốc độ ra đây để đúng cú pháp ESP-IDF
+    
     i2c_param_config(I2C_NUM_0, &conf);
     i2c_driver_install(I2C_NUM_0, conf.mode, 0, 0, 0);
 }
